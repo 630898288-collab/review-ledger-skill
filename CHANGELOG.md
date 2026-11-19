@@ -2,6 +2,13 @@
 
 维护规则：改动 `SKILL.md`、`scripts/ledger.mjs` 或任何 `references/` 下的规则文件后，把 `VERSION` 递增，并在此记一行。多个 Agent 共用同一份包，版本是排查「为什么两个 Agent 行为不一致」的第一线索。
 
+## 1.2.0 — 2026-11-20
+
+- 新增飞书文档作者解析：文件 metas 取 owner_id / latest_modify_user → 通讯录转姓名；`register` 在提交人为空时自动填入 owner，并注明最后编辑者。
+- 新增 `author <飞书链接>` 独立命令，可单独验证作者解析结果。
+- 优先级：原文明示 > 自动解析 owner > 留空；用户指定身份时按用户说的填；已有提交人不覆盖；`--no-author` 可关闭。
+- 非飞书链接、无权限、跨租户查不到姓名时静默留空，不编造。
+
 ## 1.1.2 — 2026-11-19
 
 - 版本检查改走 GitHub contents API（解析 base64），避免 raw/CDN 经代理缓存后长时间返回旧 VERSION、导致更新提醒失效。

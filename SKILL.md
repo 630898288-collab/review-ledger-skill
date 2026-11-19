@@ -56,6 +56,7 @@ node <skill_dir>/scripts/ledger.mjs health
 1. **收齐资料**。可能是一次给多个链接 / 多个本地文件 / 一段粘贴的文字 / 混合。逐个登记载体类型。
 2. **读全文**。按 `references/source-readers.md` 选择读取方式。读不通就如实标 `可读状态`，**不要假装读过**；能读多少就登记多少，并在 `备注` 写清。
 3. **抽成登记卡 JSON**。严格按 `references/extraction-rules.md` 的规则与格式。一份资料含多个复盘要拆条。
+   - **提交人不用手工查**：留空即可，脚本会对飞书云文档自动解析作者（owner）填入，并注明来源；规则见 `references/source-readers.md` 第六节。用户明确指定「记为我」时按用户说的填。
 4. **入库**：
    ```bash
    node <skill_dir>/scripts/ledger.mjs register --input /abs/path/cards.json
@@ -158,4 +159,4 @@ node <skill_dir>/scripts/install.mjs --dir <目标skills目录> --from-github   
 
 ## 版本
 
-见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.1.2。版本源：https://github.com/630898288-collab/review-ledger-skill 。
+见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.2.0。版本源：https://github.com/630898288-collab/review-ledger-skill 。

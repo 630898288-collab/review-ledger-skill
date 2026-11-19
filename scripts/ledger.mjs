@@ -7,7 +7,8 @@
  *   health                              校验坐标/字段/枚举（每次使用前先跑）
  *   find "I2 PRO 8月复盘" [--limit 10]  自然语言召回（本地打分）
  *   get  --record-id recXXX [--full]    取单条详情
- *   register --input cards.json         结构化登记（按指纹幂等）
+ *   author <飞书链接>                   读取飞书文档 owner/最后编辑者姓名
+ *   register --input cards.json         结构化登记（按指纹幂等，自动补作者）
  *   sync-dict [--apply]                 字典差异报告 / 固化新枚举
  *
  * 所有输出为 JSON，便于 Agent 解析。
@@ -205,6 +206,73 @@ function buildSearchKey(card, std, aliases) {
     std, aliases, card['覆盖周期'], arr(card['归属BU']), arr(card['涉及平台']),
     arr(card['复盘类型']), arr(card['市场区域']), card['关键词'], card['复盘事项']
   ].flat().map(str).map((x) => x.trim())).join(' | ');
+}
+
+/* ---------------------------------------------------------------- author */
+
+const DOC_TYPE_MAP = {
+  wiki: 'wiki', docx: 'docx', doc: 'doc', sheets: 'sheet', sheet: 'sheet',
+  base: 'bitable', bitable: 'bitable', mindnote: 'mindnote', slides: 'slides', file: 'file'
+};
+
+function parseFeishuRef(raw) {
+  const url = cleanUrl(raw) || '';
+  const m = String(url).match(/\/(wiki|docx|doc|sheets|sheet|base|bitable|mindnote|slides|file)\/([A-Za-z0-9]+)/);
+  if (!m) return null;
+  return { url, token: m[2], doc_type: DOC_TYPE_MAP[m[1]] || m[1] };
+}
+
+/**
+ * 取飞书文档作者：file metas 拿 owner_id / latest_modify_user → 通讯录转姓名。
+ * 提交人取 owner（创建者）。任何一步失败都静默返回，不阻断登记。
+ */
+function resolveFeishuAuthor(raw) {
+  const ref = parseFeishuRef(raw);
+  if (!ref) return { ok: false, reason: 'not_feishu_url' };
+  let meta;
+  try {
+    meta = must(lark(['drive', 'metas', 'batch_query', '--data', JSON.stringify({
+      request_docs: [{ doc_token: ref.token, doc_type: ref.doc_type }]
+    })]), '读取文档元数据');
+  } catch (e) {
+    return { ok: false, reason: 'meta_failed', error: e.message };
+  }
+  const m = (meta?.metas || [])[0];
+  if (!m) return { ok: false, reason: 'no_meta', failed: meta?.failed_list };
+  const ids = uniq([m.owner_id, m.latest_modify_user].filter(Boolean));
+  let users = [];
+  if (ids.length) {
+    try {
+      const u = must(lark(['contact', '+search-user', '--user-ids', ids.join(',')]), '解析作者姓名');
+      users = u?.users || [];
+    } catch { /* 通讯录查不到只影响姓名，不影响 owner_id */ }
+  }
+  const byId = Object.fromEntries(users.map((u) => [u.open_id, u.localized_name || u.name || u.open_id]));
+  return {
+    ok: true,
+    doc_type: m.doc_type, doc_token: m.doc_token, title: m.title,
+    create_time: m.create_time,
+    owner_id: m.owner_id || null,
+    owner_name: byId[m.owner_id] || null,
+    last_modify_id: m.latest_modify_user || null,
+    last_modify_name: byId[m.latest_modify_user] || null,
+    author: byId[m.owner_id] || null
+  };
+}
+
+/** 提交人空值自动补填：显式填写优先；非飞书链接不查；失败留空不报错。 */
+function ensureSubmitter(card, opts) {
+  if (str(card['提交人']).trim()) return { changed: false, reason: 'explicit' };
+  if (opts.no_author) return { changed: false, reason: 'disabled' };
+  const url = cleanUrl(card['原文链接']);
+  if (!url || !parseFeishuRef(url)) return { changed: false, reason: 'not_feishu_url' };
+  const r = resolveFeishuAuthor(url);
+  if (!r.ok || !r.author) return { changed: false, ...r };
+  card['提交人'] = r.author;
+  card['备注'] = [str(card['备注']),
+    `提交人自动取自飞书文档 owner：${r.author}；最后编辑者：${r.last_modify_name || r.last_modify_id || '未知'}`
+  ].filter(Boolean).join(' / ');
+  return { changed: true, ...r };
 }
 
 /* ---------------------------------------------------------------- health */
@@ -431,8 +499,11 @@ function register(inputPath, opts) {
   let aliasesObj = null;
   let aliasesDirty = false;
   const results = [];
+  const authors = [];
 
   for (let i = 0; i < cards.length; i++) {
+    const a = ensureSubmitter(cards[i], opts);
+    if (a.changed) authors.push({ index: i, author: a.author, owner_id: a.owner_id, last_modify_name: a.last_modify_name });
     const n = normalizeCard(cards[i], fields);
     if (n.aliasesChanged) { aliasesObj = n.aliasesObj; aliasesDirty = true; }
     candidatesAll.items.push(...n.candidates);
@@ -455,6 +526,7 @@ function register(inputPath, opts) {
       record_id: rid,
       fingerprint: fp,
       复盘标题: n.card['复盘标题'] || null,
+      提交人: n.card['提交人'] || null,
       待人工确认: !!n.card['待人工确认']
     });
     appendFileSync(LOG_FILE, JSON.stringify({
@@ -481,6 +553,7 @@ function register(inputPath, opts) {
     total: cards.length,
     created: results.filter((r) => r.action === 'created').length,
     updated: results.filter((r) => r.action === 'updated').length,
+    authors_enriched: authors,
     new_candidate_values: candidatesAll.items.length,
     new_projects: aliasesDirty,
     results
@@ -596,6 +669,9 @@ async function main() {
     case 'health': out = health(); break;
     case 'find': out = find(positional[0] || '', opts); break;
     case 'get': out = get(opts.record_id, opts.full); break;
+    case 'author':
+      out = { ok: true, command: 'author', result: resolveFeishuAuthor(positional[0] || '') };
+      break;
     case 'register':
       if (!opts.input) throw new Error('register 需要 --input <cards.json|->');
       out = register(opts.input, opts);
@@ -610,7 +686,8 @@ async function main() {
           'health',
           'find "I2 PRO 8月复盘" [--limit 10] [--project X] [--period X] [--full]',
           'get --record-id recXXX [--full]',
-          'register --input /abs/cards.json [--dry-run]',
+          'author <飞书文档链接> [--json]',
+          'register --input /abs/cards.json [--dry-run] [--no-author]',
           'sync-dict [--apply]',
           'update-status [--check-update]',
           '--self-update | --dismiss-update | --skip-update-check'

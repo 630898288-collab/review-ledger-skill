@@ -58,3 +58,30 @@
 - 只有截图/图片无文字层：本机可用 macOS Vision OCR（`pyobjc-framework-Vision`），无 tesseract；识别不了就标「仅摘要」并在备注说明。
 - 一份资料极大（> 100 页）：先读目录/大纲定位复盘章节，不要全量塞进上下文；在备注注明「仅抽取 XX 章节」。
 - 多次重试仍失败：停止重试，如实报告，不要卡住整个登记任务。
+
+## 六、飞书文档作者解析（提交人自动补填）
+
+对**飞书云文档 / docx / wiki / sheet / base**，`register` 在 `提交人` 为空时自动做两步解析，无需 Agent 手工查：
+
+1. **取文件元数据**（只读，wiki 链接自动解包到实际 docx）：
+   ```bash
+   lark-cli drive metas batch_query --data '{"request_docs":[{"doc_token":"<token>","doc_type":"wiki|docx|doc|sheet|bitable"}]}' --as user
+   ```
+   返回 `owner_id`（创建者）、`latest_modify_user`（最后编辑者）、`title`、`create_time`。
+2. **open_id 转姓名**：
+   ```bash
+   lark-cli contact +search-user --user-ids "<owner_id>,<latest_modify_user>" --as user
+   ```
+   用 `localized_name` 填 `提交人`，取 **owner（创建者）**；最后编辑者写进 `备注`。
+
+单独验证命令：
+```bash
+node <skill_dir>/scripts/ledger.mjs author "<飞书文档链接>"
+```
+
+**规则与边界**
+- 优先级：原文明示的提交人 > 自动解析的 owner > 留空。用户明确说「提交人记为我」时按用户说的填。
+- `提交人` 已有值（含手填）时**不覆盖**；跳过自动解析用 `register --no-author`。
+- 非飞书链接、无权限、跨租户查不到姓名 → 静默留空，不报错、不编造。
+- 两步都是只读，全程 `--as user`；姓名解析失败仍保留 owner_id 便于人工核对。
+- 补填结果随登记写入台账，`authors_enriched` 回报本次补了哪些记录。

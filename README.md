@@ -8,6 +8,7 @@
 
 - **不迁移原始资料**：只建索引与内容快照，原文件留在原地（很多复盘并不归属于你，没法搬）
 - **安装位置无关**：不假设 `~/.workbuddy`，可装进 Claude Code / Cursor / Codex / WorkBuddy 等任意 Agent 的 skills 目录
+- **提交人自动解析**：飞书云文档的提交人为空时，自动取文档 owner 填入（`drive metas` → `contact` 两步只读解析），无法解析则留空不猜
 - **多 Agent 共用**：同一张表、同一套字典、按「来源指纹」幂等登记，两个 Agent 登记同一份资料只出一条记录
 - **双层自更新**：台账 select 枚举实时读取、新值自动沉淀；GitHub 包版本自动检查、用户确认后才升级
 - **本地私有数据不进仓库**：base_token / table_id 只放 `ledger-config.local.json`，自更新永不覆盖它和 `state/*`
@@ -52,6 +53,7 @@ Agent 侧统一走 `scripts/ledger.mjs`，不要各自拼 `lark-cli` 命令：
 node <skill_dir>/scripts/ledger.mjs health
 node <skill_dir>/scripts/ledger.mjs find "I2 PRO 8月复盘"
 node <skill_dir>/scripts/ledger.mjs get --record-id <id> --full
+node <skill_dir>/scripts/ledger.mjs author "<飞书文档链接>"   # 单独查文档作者
 node <skill_dir>/scripts/ledger.mjs register --input cards.json
 node <skill_dir>/scripts/ledger.mjs sync-dict            # 只报告枚举差异
 node <skill_dir>/scripts/ledger.mjs sync-dict --apply    # 经用户确认后追加 select 选项
