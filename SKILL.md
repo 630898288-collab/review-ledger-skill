@@ -107,7 +107,7 @@ node <skill_dir>/scripts/ledger.mjs health
 
 **自动发生（每次运行，无需人工）**
 - `health` 实时拉取线上 select 选项 → 所有 Agent 用同一套最新口径
-- 登记时遇到新项目别名 → 自动追加到 `references/project-aliases.json`
+- 登记时遇到新项目别名 → 自动追加到 `references/project-aliases.json`（新项目会把卡片里的 `项目别名` 一并登记；命中已有项目时追加新别名，去重）；批量登记共用同一份字典、末尾统一写回，不会互相覆盖
 - 登记时遇到字典里没有的枚举值 → 该条降级为「待确认」、原值写入 `备注`、勾「待人工确认」，同时把新值沉淀到 `state/candidates.json`
 - 因此**新 BU、新平台、新项目会自己浮出来**，不需要改 SKILL.md
 
@@ -159,4 +159,4 @@ node <skill_dir>/scripts/install.mjs --dir <目标skills目录> --from-github   
 
 ## 版本
 
-见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.2.0。版本源：https://github.com/630898288-collab/review-ledger-skill 。
+见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.2.1。版本源：https://github.com/630898288-collab/review-ledger-skill 。

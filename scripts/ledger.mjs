@@ -188,17 +188,25 @@ function normKey(s) {
   return str(s).toLowerCase().replace(/[\s_\-]/g, '');
 }
 
-function normalizeProject(raw, aliasesObj) {
+function normalizeProject(raw, aliasesObj, extraAliases = []) {
   const name = str(raw).trim();
   if (!name) return { standard: '', aliases: '', isNew: false };
   const k = normKey(name);
+  const extras = extraAliases.map((x) => str(x).trim()).filter((x) => x && normKey(x) !== k);
   for (const [std, list] of Object.entries(aliasesObj.aliases || {})) {
     if ([std, ...arr(list)].some((x) => normKey(x) === k)) {
-      return { standard: std, aliases: arr(list).join(', '), isNew: false };
+      // 命中已有项目：把卡片带来的新别名并入字典，让别名越用越全
+      const cur = arr(list).slice();
+      let changed = false;
+      for (const ex of extras) {
+        if (![std, ...cur].some((x) => normKey(x) === normKey(ex))) { cur.push(ex); changed = true; }
+      }
+      if (changed) aliasesObj.aliases[std] = cur;
+      return { standard: std, aliases: cur.join(', '), isNew: changed };
     }
   }
-  aliasesObj.aliases[name] = [name];
-  return { standard: name, aliases: name, isNew: true };
+  aliasesObj.aliases[name] = [name, ...extras];
+  return { standard: name, aliases: [name, ...extras].join(', '), isNew: true };
 }
 
 function buildSearchKey(card, std, aliases) {
@@ -405,13 +413,14 @@ const PROTECTED = new Set([
   '产出方类型', '产出方名称', '资料归属', '载体类型'
 ]);
 
-function normalizeCard(raw, fields) {
+function normalizeCard(raw, fields, aliasesObjIn) {
   const fieldMap = Object.fromEntries(fields.map((f) => [f.name, f]));
-  const aliasesObj = readJson(ALIASES_FILE, { aliases: {} });
+  const aliasesObj = aliasesObjIn || readJson(ALIASES_FILE, { aliases: {} });
   if (!aliasesObj.aliases) aliasesObj.aliases = {};
   const card = { ...raw };
 
-  const p = normalizeProject(card['项目标准名'], aliasesObj);
+  const extraAliases = str(card['项目别名']).split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+  const p = normalizeProject(card['项目标准名'], aliasesObj, extraAliases);
   if (p.standard) card['项目标准名'] = p.standard;
   if (p.aliases) card['项目别名'] = uniq([str(card['项目别名']).split(/[,，]/), p.aliases.split(/[,，]/)].flat().map((x) => x.trim())).join(', ');
   card['检索键'] = buildSearchKey(card, p.standard, p.aliases);
@@ -496,7 +505,8 @@ function register(inputPath, opts) {
   const byFp = new Map(existing.map((r) => [str(r['来源指纹']), r]));
   const candidatesAll = readJson(CANDIDATES_FILE, { items: [] });
   if (!candidatesAll.items) candidatesAll.items = [];
-  let aliasesObj = null;
+  let aliasesObj = readJson(ALIASES_FILE, { aliases: {} });
+  if (!aliasesObj.aliases) aliasesObj.aliases = {};
   let aliasesDirty = false;
   const results = [];
   const authors = [];
@@ -504,8 +514,8 @@ function register(inputPath, opts) {
   for (let i = 0; i < cards.length; i++) {
     const a = ensureSubmitter(cards[i], opts);
     if (a.changed) authors.push({ index: i, author: a.author, owner_id: a.owner_id, last_modify_name: a.last_modify_name });
-    const n = normalizeCard(cards[i], fields);
-    if (n.aliasesChanged) { aliasesObj = n.aliasesObj; aliasesDirty = true; }
+    const n = normalizeCard(cards[i], fields, aliasesObj);
+    if (n.aliasesChanged) aliasesDirty = true;
     candidatesAll.items.push(...n.candidates);
 
     const fp = n.card['来源指纹'];
