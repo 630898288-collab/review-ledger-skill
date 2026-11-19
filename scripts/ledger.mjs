@@ -9,6 +9,8 @@
  *   get  --record-id recXXX [--full]    取单条详情
  *   author <飞书链接>                   读取飞书文档 owner/最后编辑者姓名
  *   register --input cards.json         结构化登记（按指纹幂等，自动补作者）
+ *            [--on-duplicate skip|update|force]
+ *                                        软查重：同项目 + 标题几乎相同/同周期 → 默认拦下等用户决定
  *   sync-dict [--apply]                 字典差异报告 / 固化新枚举
  *
  * 所有输出为 JSON，便于 Agent 解析。
@@ -484,6 +486,84 @@ function normalizeCard(raw, fields, aliasesObjIn) {
   return { card: out, candidates, aliasesObj, aliasesChanged: p.isNew };
 }
 
+/* ------------------------------------------------ 疑似重复（软查重） */
+
+/**
+ * 同一份资料换个链接再登记，指纹挡不住（指纹只认 URL）。
+ * 这里按「项目 + 标题 + 周期」再判一次，分三级：
+ *   high   —— 标题几乎相同（去标点/年份/品牌后相等或一方包含另一方）；或标题高度相似且周期重叠
+ *   medium —— 同一项目同一周期，标题相似度过半
+ *   low    —— 同一项目、周期完全重叠，但标题不同（多半是同一项目的不同资料，不拦）
+ * 只有 high / medium 会拦。
+ */
+const normTitle = (s) => str(s).toLowerCase()
+  .replace(/[\s\-_－—·、，,。.（）()【】\[\]「」《》:：|｜/+＋]/g, '')
+  .replace(/^20\d{2}年?/, '')
+  .replace(/^飞利浦/, '');
+
+function bigrams(s) {
+  const t = normTitle(s);
+  if (!t) return new Set();
+  if (t.length === 1) return new Set([t]);
+  const out = new Set();
+  for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+  return out;
+}
+
+function jaccard(a, b) {
+  const A = bigrams(a), Bg = bigrams(b);
+  if (!A.size || !Bg.size) return 0;
+  let inter = 0;
+  for (const x of A) if (Bg.has(x)) inter++;
+  return inter / (A.size + Bg.size - inter);
+}
+
+function dayOf(v) {
+  const m = str(v).match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null;
+}
+
+function periodOverlap(a, b) {
+  const a1 = dayOf(a['周期起']), b1 = dayOf(b['周期起']);
+  if (a1 == null || b1 == null) return null;
+  const a2 = dayOf(a['周期止']) ?? a1, b2 = dayOf(b['周期止']) ?? b1;
+  return a1 <= b2 && b1 <= a2;
+}
+
+function detectDuplicates(card, rows, selfFp) {
+  const std = normKey(card['项目标准名']);
+  if (!std) return [];
+  const title = str(card['复盘标题']);
+  const nt = normTitle(title);
+  const out = [];
+  for (const r of rows) {
+    if (selfFp && str(r['来源指纹']) === selfFp) continue;
+    if (normKey(r['项目标准名']) !== std) continue;
+    const rt = str(r['复盘标题']);
+    const nrt = normTitle(rt);
+    const j = jaccard(title, rt);
+    const ov = periodOverlap(card, r);
+    let level = null, reason = null;
+    if (nt && nrt && (nt === nrt ||
+      ((nt.includes(nrt) || nrt.includes(nt)) && Math.min(nt.length, nrt.length) >= 6 && Math.abs(nt.length - nrt.length) <= 8))) {
+      level = 'high'; reason = '标题几乎相同（去掉年份/标点后重合）';
+    } else if (j >= 0.72 && ov !== false) {
+      level = 'high'; reason = `标题相似度 ${(j * 100).toFixed(0)}% 且周期重叠`;
+    } else if (j >= 0.5 && ov === true) {
+      level = 'medium'; reason = `同一项目同一周期，标题相似度 ${(j * 100).toFixed(0)}%`;
+    } else if (ov === true) {
+      level = 'low'; reason = '同一项目、周期完全重叠（多为同项目不同资料）';
+    }
+    if (!level) continue;
+    out.push({
+      level, reason, similarity: Number(j.toFixed(2)), record_id: r.record_id,
+      复盘标题: rt, 覆盖周期: str(r['覆盖周期']), 原文链接: cleanUrl(r['原文链接'])
+    });
+  }
+  const rank = { high: 3, medium: 2, low: 1 };
+  return out.sort((x, y) => rank[y.level] - rank[x.level] || y.similarity - x.similarity).slice(0, 3);
+}
+
 function mergeForUpdate(existing, incoming) {
   const merged = { ...incoming };
   const humanConfirmed = existing['待人工确认'] === false;
@@ -513,6 +593,11 @@ function register(inputPath, opts) {
   let aliasesDirty = false;
   const results = [];
   const authors = [];
+  // skip（默认，遇到疑似重复就拦下等用户决定）| update（覆盖第一条疑似重复）| force（无视查重照常新增）
+  const onDup = str(opts.on_duplicate || 'skip').toLowerCase();
+  if (!['skip', 'update', 'force'].includes(onDup)) {
+    throw new Error('--on-duplicate 只能是 skip | update | force');
+  }
 
   for (let i = 0; i < cards.length; i++) {
     const a = ensureSubmitter(cards[i], opts);
@@ -523,27 +608,50 @@ function register(inputPath, opts) {
 
     const fp = n.card['来源指纹'];
     const hit = CFG.policy.dedup_on_register ? byFp.get(fp) : null;
+    // 同链接 = 硬重复（直接按原记录更新）；不同链接但同项目同标题/同周期 = 软重复（默认拦截，等用户决定）
+    const dupes = detectDuplicates(n.card, existing, fp);
+    const blocking = dupes.filter((d) => d.level !== 'low');
     if (dryRun) {
-      results.push({ index: i, action: hit ? 'would_update' : 'would_create', fingerprint: fp, fields: n.card });
+      results.push({
+        index: i, action: hit ? 'would_update' : blocking.length ? 'would_block_duplicate' : 'would_create',
+        fingerprint: fp, duplicates: dupes, fields: n.card
+      });
       continue;
     }
-    const payload = hit ? mergeForUpdate(hit, n.card) : n.card;
+    if (!hit && blocking.length && onDup === 'skip') {
+      results.push({
+        index: i, action: 'skipped_duplicate', fingerprint: fp,
+        复盘标题: n.card['复盘标题'] || null, duplicates: blocking,
+        hint: '台账里已有疑似同一条资料；确认要覆盖就加 --on-duplicate update（覆盖第一条候选），确认是另一份资料就加 --on-duplicate force'
+      });
+      continue;
+    }
+    let target = hit || null;
+    if (!target && blocking.length && onDup === 'update') {
+      target = existing.find((r) => r.record_id === blocking[0].record_id) || null;
+    }
+    const payload = target ? mergeForUpdate(target, n.card) : n.card;
     const args = ['base', '+record-upsert', ...B, '--json', JSON.stringify(payload)];
-    if (hit) args.push('--record-id', hit.record_id);
+    if (target) args.push('--record-id', target.record_id);
     const d = must(lark(args), '写入台账');
-    const rid = hit?.record_id || d?.record?.record_id_list?.[0] || null;
-    if (rid && !hit) byFp.set(fp, { record_id: rid, 来源指纹: fp });
+    const rid = target?.record_id || d?.record?.record_id_list?.[0] || null;
+    if (rid && !target) {
+      byFp.set(fp, { record_id: rid, 来源指纹: fp });
+      // 同批次内的后续卡片也要能查出与本条重复
+      existing.push({ ...n.card, record_id: rid, 来源指纹: fp });
+    }
     results.push({
       index: i,
-      action: hit ? 'updated' : 'created',
+      action: target ? (hit ? 'updated' : 'updated_duplicate') : 'created',
       record_id: rid,
       fingerprint: fp,
       复盘标题: n.card['复盘标题'] || null,
       提交人: n.card['提交人'] || null,
-      待人工确认: !!n.card['待人工确认']
+      待人工确认: !!n.card['待人工确认'],
+      duplicates: dupes.length ? dupes : undefined
     });
     appendFileSync(LOG_FILE, JSON.stringify({
-      at: new Date().toISOString(), action: hit ? 'updated' : 'created',
+      at: new Date().toISOString(), action: target ? (hit ? 'updated' : 'updated_duplicate') : 'created',
       record_id: rid, fingerprint: fp, source: n.card['登记来源'] || null
     }) + '\n', 'utf8');
   }
@@ -561,11 +669,16 @@ function register(inputPath, opts) {
     writeJson(CANDIDATES_FILE, candidatesAll);
   }
 
+  const skipped = results.filter((r) => r.action === 'skipped_duplicate');
   return {
     ok: true, command: 'register', input: inputPath, dry_run: dryRun,
     total: cards.length,
     created: results.filter((r) => r.action === 'created').length,
     updated: results.filter((r) => r.action === 'updated').length,
+    updated_duplicate: results.filter((r) => r.action === 'updated_duplicate').length,
+    skipped_duplicate: skipped.length,
+    needs_decision: skipped.length > 0,
+    on_duplicate: onDup,
     authors_enriched: authors,
     new_candidate_values: candidatesAll.items.length,
     new_projects: aliasesDirty,
@@ -700,7 +813,7 @@ async function main() {
           'find "I2 PRO 8月复盘" [--limit 10] [--project X] [--period X] [--full]',
           'get --record-id recXXX [--full]',
           'author <飞书文档链接> [--json]',
-          'register --input /abs/cards.json [--dry-run] [--no-author]',
+          'register --input /abs/cards.json [--dry-run] [--no-author] [--on-duplicate skip|update|force]',
           'sync-dict [--apply]',
           'update-status [--check-update]',
           '--self-update | --dismiss-update | --skip-update-check'
