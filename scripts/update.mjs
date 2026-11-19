@@ -297,8 +297,9 @@ export async function applyUpdate() {
     }
 
     const skipped = [];
-    const copied = copyTree(src, SKILL_ROOT, skipped);
+    // 必须在覆盖之前读出本地别名，否则 copyTree 已经把用户的自定义项冲掉了。
     const aliasMerge = mergeAliases(src);
+    const copied = copyTree(src, SKILL_ROOT, skipped);
     if (aliasMerge) fs.writeFileSync(aliasMerge.localPath, aliasMerge.content, 'utf8');
     try { fs.unlinkSync(CACHE_FILE); } catch { /* ignore */ }
 
