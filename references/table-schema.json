@@ -1,0 +1,67 @@
+[
+  { "type": "text", "name": "复盘标题", "description": "主字段。资料原标题；无标题时由 Agent 生成「项目标准名 + 覆盖周期 + 复盘」" },
+  { "type": "text", "name": "项目标准名", "description": "归一化后的项目/事项主键。同一项目必须写法一致，映射表见 references/field-dictionary.md" },
+  { "type": "text", "name": "项目别名", "description": "该项目已知别名/缩写/旧称，逗号分隔。例：i2pro, I2Pro, I2 PRO" },
+  { "type": "text", "name": "覆盖周期", "description": "复盘所覆盖的业务周期原文表述，如 2026年8月 / 2026Q3 / 8/1-8/31。按月份召回时以此为准" },
+  { "type": "datetime", "name": "周期起", "style": { "format": "yyyy-MM-dd" }, "description": "覆盖周期的起始日，供范围筛选；原文只有月份时取该月 1 日" },
+  { "type": "datetime", "name": "周期止", "style": { "format": "yyyy-MM-dd" }, "description": "覆盖周期的结束日；原文只有月份时取该月最后一日" },
+  { "type": "datetime", "name": "复盘提交日期", "style": { "format": "yyyy-MM-dd" }, "description": "复盘成文/提交日期。与「覆盖周期」是两个不同概念，不要混填" },
+  { "type": "text", "name": "检索键", "description": "系统生成，勿手改。拼接：项目标准名 | 别名 | 覆盖周期 | BU | 平台 | 复盘类型 | 关键词。供一次性模糊召回" },
+
+  { "type": "select", "name": "归属BU", "multiple": false, "description": "复盘归属于哪个业务单元", "options": [
+    { "name": "水健康/净水" }, { "name": "个护" }, { "name": "按摩" }, { "name": "运动/Fitness" },
+    { "name": "母婴" }, { "name": "海外" }, { "name": "跨BU/集团" }, { "name": "其他" }, { "name": "待确认" }
+  ] },
+  { "type": "text", "name": "复盘事项", "description": "具体是做什么的：本次复盘的对象与范围，一句话说清" },
+  { "type": "select", "name": "市场区域", "multiple": false, "description": "国内还是海外市场", "options": [
+    { "name": "国内" }, { "name": "海外" }, { "name": "全球" }, { "name": "待确认" }
+  ] },
+  { "type": "select", "name": "涉及平台", "multiple": true, "description": "涉及哪些平台，可多选", "options": [
+    { "name": "京东" }, { "name": "天猫" }, { "name": "山姆" }, { "name": "抖音" }, { "name": "小红书" },
+    { "name": "亚马逊" }, { "name": "独立站" }, { "name": "线下门店" }, { "name": "微信/公众号" },
+    { "name": "B站" }, { "name": "快手" }, { "name": "其他" }, { "name": "待确认" }
+  ] },
+  { "type": "select", "name": "复盘类型", "multiple": false, "description": "营销复盘还是日常工作复盘", "options": [
+    { "name": "营销复盘" }, { "name": "日常工作复盘" }, { "name": "其他" }, { "name": "待确认" }
+  ] },
+  { "type": "text", "name": "提交人", "description": "把复盘交出来的人。可能是外部人员，故用文本而非人员字段" },
+  { "type": "select", "name": "复盘范围", "multiple": false, "description": "内部复盘=复盘我方团队/项目执行；外部复盘=复盘市场/竞品/行业/外部合作方", "options": [
+    { "name": "内部复盘" }, { "name": "外部复盘" }, { "name": "内外部结合" }, { "name": "待确认" }
+  ] },
+  { "type": "select", "name": "产出方类型", "multiple": false, "description": "这份复盘是谁做的", "options": [
+    { "name": "自己团队" }, { "name": "服务商" }, { "name": "混合" }, { "name": "其他" }, { "name": "待确认" }
+  ] },
+  { "type": "text", "name": "产出方名称", "description": "具体团队或公司名，如 Digishare、飞利浦国内市场部" },
+
+  { "type": "select", "name": "载体类型", "multiple": false, "description": "原始资料的形态，决定用哪种读取方式（见 references/source-readers.md）", "options": [
+    { "name": "飞书云文档" }, { "name": "飞书多维表" }, { "name": "腾讯文档" }, { "name": "在线HTML报告" },
+    { "name": "本地文件" }, { "name": "纯文本段落" }, { "name": "邮件" }, { "name": "其他" }
+  ] },
+  { "type": "select", "name": "资料归属", "multiple": false, "description": "资料归谁所有。非本人资料只读引用，不做迁移/编辑", "options": [
+    { "name": "本人" }, { "name": "他人" }, { "name": "外部" }, { "name": "未知" }
+  ] },
+  { "type": "text", "name": "原文链接", "style": { "type": "url" }, "description": "可打开的原文链接；本地文件留空" },
+  { "type": "text", "name": "本地路径", "description": "本地文件的绝对路径；在线资料留空" },
+  { "type": "select", "name": "可读状态", "multiple": false, "description": "Agent 能否回源读取，影响内容召回的可靠性", "options": [
+    { "name": "可直接读取" }, { "name": "需登录" }, { "name": "需权限" }, { "name": "链接失效" },
+    { "name": "仅本地" }, { "name": "待核验" }
+  ] },
+  { "type": "text", "name": "来源指纹", "description": "去重键：规范化链接 hash 或文件内容 hash。同指纹只保留一条记录" },
+
+  { "type": "text", "name": "一句话结论", "description": "这份复盘最核心的结论" },
+  { "type": "text", "name": "核心策略", "description": "逐条列出原文提到的策略/打法，编号分行。回答「复盘里提到的策略」时优先取此字段" },
+  { "type": "text", "name": "关键数据", "description": "原文中的量化结论与指标，保留原始数字与单位" },
+  { "type": "text", "name": "内容摘要", "description": "200-500 字结构化摘要：背景 / 动作 / 结果 / 结论" },
+  { "type": "text", "name": "关键词", "description": "3-8 个检索词，逗号分隔" },
+  { "type": "text", "name": "原文摘录", "description": "支撑结论的原样摘录，不改写；无依据时留空" },
+
+  { "type": "text", "name": "登记来源", "description": "登记该条的 Agent/会话标识，如 WorkBuddy/主会话。多 Agent 共用时的溯源依据" },
+  { "type": "created_at", "name": "登记时间", "style": { "format": "yyyy-MM-dd HH:mm" } },
+  { "type": "updated_at", "name": "最后变更", "style": { "format": "yyyy-MM-dd HH:mm" } },
+  { "type": "select", "name": "解析状态", "multiple": false, "description": "Agent 对原文的实际读取程度", "options": [
+    { "name": "已读全文" }, { "name": "仅摘要" }, { "name": "未读取" }, { "name": "无法访问" }
+  ] },
+  { "type": "number", "name": "置信度", "style": { "type": "plain", "precision": 2 }, "description": "0-1，Agent 对自动抽取结果的把握；<0.7 应勾「待人工确认」" },
+  { "type": "checkbox", "name": "待人工确认" },
+  { "type": "text", "name": "备注" }
+]

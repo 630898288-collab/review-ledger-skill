@@ -1,0 +1,13 @@
+# 本机私有配置：飞书台账坐标不进版本库
+references/ledger-config.local.json
+
+# 本地运行状态：候选枚举、登记日志、更新缓存
+state/
+.update-cache.json
+
+# 凭据与临时文件
+.env
+.env.*
+!.env.example
+*.zip
+.DS_Store

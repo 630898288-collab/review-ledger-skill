@@ -1,0 +1,23 @@
+{
+  "_note": "安装模板：不含任何私有台账坐标。请在技能目录放 ledger-config.local.json（或设置 REVIEW_LEDGER_* 环境变量）填写自己的 base_token / table_id / view_id；install.mjs 会引导完成。",
+  "schema_version": 1,
+  "ledger_name": "市场部复盘台账",
+  "base_token": "",
+  "table_id": "",
+  "table_name": "复盘总表",
+  "base_url": "",
+  "view_id": "",
+  "view_name": "检索视图",
+  "time_zone": "Asia/Shanghai",
+  "identity": "user",
+  "lark_cli_bin": "lark-cli",
+  "primary_field": "复盘标题",
+  "dedup_field": "来源指纹",
+  "search_field": "检索键",
+  "policy": {
+    "auto_add_select_option": false,
+    "fallback_option": "待确认",
+    "low_confidence_threshold": 0.7,
+    "dedup_on_register": true
+  }
+}
