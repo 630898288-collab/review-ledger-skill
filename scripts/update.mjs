@@ -24,8 +24,9 @@ const CACHE_FILE = path.join(SKILL_ROOT, '.update-cache.json');
 
 const DEFAULT_REPO = process.env.REVIEW_LEDGER_UPDATE_REPO || '630898288-collab/review-ledger-skill';
 const DEFAULT_BRANCH = 'main';
+// 用 GitHub API 而不是 raw：raw 经代理/CDN 缓存时可能长时间返回旧 VERSION，导致更新提醒失效。
 export const DEFAULT_VERSION_URL =
-  `https://raw.githubusercontent.com/${DEFAULT_REPO}/${DEFAULT_BRANCH}/VERSION`;
+  `https://api.github.com/repos/${DEFAULT_REPO}/contents/VERSION?ref=${DEFAULT_BRANCH}`;
 export const DEFAULT_ZIP_URL =
   `https://github.com/${DEFAULT_REPO}/archive/refs/heads/${DEFAULT_BRANCH}.zip`;
 
@@ -146,7 +147,15 @@ export async function checkForUpdate({ force = false } = {}) {
   }
   try {
     const raw = await fetchRemote(cfg.versionUrl, { timeoutMs: 4000 });
-    const latestVersion = raw.toString('utf8').trim().split(/\r?\n/)[0].trim();
+    const text = raw.toString('utf8').trim();
+    let versionText = text;
+    if (text.startsWith('{')) {
+      // GitHub contents API：{ content: "<base64>", encoding: "base64" }
+      const j = JSON.parse(text);
+      if (j.encoding !== 'base64' || typeof j.content !== 'string') throw new Error('VERSION API 响应异常');
+      versionText = Buffer.from(j.content, 'base64').toString('utf8');
+    }
+    const latestVersion = versionText.trim().split(/\r?\n/)[0].trim();
     if (!latestVersion || latestVersion.length > 40 || /\s/.test(latestVersion)) {
       throw new Error('VERSION 内容异常');
     }

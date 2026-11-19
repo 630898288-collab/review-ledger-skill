@@ -158,4 +158,4 @@ node <skill_dir>/scripts/install.mjs --dir <目标skills目录> --from-github   
 
 ## 版本
 
-见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.1.1。版本源：https://github.com/630898288-collab/review-ledger-skill 。
+见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.1.2。版本源：https://github.com/630898288-collab/review-ledger-skill 。
