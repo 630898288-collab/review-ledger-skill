@@ -379,6 +379,7 @@ function brief(row, full) {
 
 function find(query, opts) {
   const parsed = tokenize(query);
+  const noQuery = !parsed.tokens.length && !parsed.months.length;
   let rows = loadAll();
   if (opts.project) {
     const p = normKey(opts.project);
@@ -389,8 +390,10 @@ function find(query, opts) {
     rows = rows.filter((r) => str(r['覆盖周期']).toLowerCase().includes(p) || str(r['检索键']).toLowerCase().includes(p));
   }
   const scored = rows.map((r) => ({ row: r, score: scoreRow(r, parsed) }))
-    .filter((x) => !opts.project && !opts.period ? x.score > 0 : true)
-    .sort((a, b) => b.score - a.score)
+    .filter((x) => !opts.project && !opts.period && !noQuery ? x.score > 0 : true)
+    .sort((a, b) => (noQuery && !opts.project && !opts.period
+      ? str(b.row['周期起']).localeCompare(str(a.row['周期起'])) || str(b.row['复盘提交日期']).localeCompare(str(a.row['复盘提交日期']))
+      : b.score - a.score))
     .slice(0, Number(opts.limit) || 10);
   return {
     ok: true, command: 'find', query,

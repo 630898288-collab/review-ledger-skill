@@ -77,7 +77,7 @@ node <skill_dir>/scripts/ledger.mjs health
    ```bash
    node <skill_dir>/scripts/ledger.mjs find "XX 项目 8月" --limit 10
    ```
-   脚本拉全表在本地加权打分（项目名/别名/覆盖周期/关键词/标题/检索键），比飞书的整串关键词搜索更适合「某某项目 8 月复盘」这类口语提问；也支持 `--project`、`--period` 精确收窄。
+   脚本拉全表在本地加权打分（项目名/别名/覆盖周期/关键词/标题/检索键），比飞书的整串关键词搜索更适合「某某项目 8 月复盘」这类口语提问；也支持 `--project`、`--period` 精确收窄。**不带查询词时**（`find ""`）按周期起倒序列出全部，用于「把台账里的复盘列一下」。
 3. **返回规则**：
    - 命中 1 条 → 直接给「标题 + 链接 + 覆盖周期」，一句话
    - 命中多条 → 按相关度列 2–5 条，最贴合的放最前，不凑数
@@ -159,4 +159,4 @@ node <skill_dir>/scripts/install.mjs --dir <目标skills目录> --from-github   
 
 ## 版本
 
-见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.2.1。版本源：https://github.com/630898288-collab/review-ledger-skill 。
+见根目录 `VERSION` 与 `CHANGELOG.md`。当前 1.2.2。版本源：https://github.com/630898288-collab/review-ledger-skill 。
